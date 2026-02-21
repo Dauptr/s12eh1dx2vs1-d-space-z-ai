@@ -36,6 +36,79 @@
       color: #888;
       margin-bottom: 2rem;
     }
+    .url-input-section {
+      max-width: 600px;
+      margin: 2rem auto;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 2rem;
+    }
+    .url-input-section h2 {
+      font-size: 1.1rem;
+      color: #00d4ff;
+      margin-bottom: 1rem;
+    }
+    .url-input-group {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .url-input-group input {
+      flex: 1;
+      min-width: 200px;
+      padding: 1rem 1.5rem;
+      font-size: 1rem;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+    .url-input-group input:focus {
+      border-color: #00d4ff;
+    }
+    .url-input-group input::placeholder {
+      color: #666;
+    }
+    .url-input-group button {
+      padding: 1rem 2rem;
+      font-size: 1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+      color: #fff;
+      cursor: pointer;
+      transition: transform 0.3s, box-shadow 0.3s;
+    }
+    .url-input-group button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 20px rgba(0, 212, 255, 0.3);
+    }
+    .quick-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      justify-content: center;
+    }
+    .quick-link {
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      color: #888;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-decoration: none;
+    }
+    .quick-link:hover {
+      border-color: #00d4ff;
+      color: #00d4ff;
+    }
     .features {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -119,11 +192,28 @@
     <header>
       <div class="logo">🔑 Mind Key</div>
       <p class="tagline">Universal Access Engine - Browse, Clone & Deploy Any URL</p>
-      <div class="cta">
-        <a href="https://s12eh1dx2vs1-d.space.z.ai/" class="btn btn-primary">Launch App →</a>
-        <a href="https://github.com/Dauptr/s12eh1dx2vs1-d-space-z-ai" class="btn btn-secondary">View Source</a>
-      </div>
     </header>
+
+    <!-- Live Preview URL Input -->
+    <div class="url-input-section">
+      <h2>🚀 Quick Preview - Enter Target URL</h2>
+      <div class="url-input-group">
+        <input type="text" id="targetUrl" placeholder="https://example.com or localhost:3000" />
+        <button onclick="openPreview()">Preview →</button>
+      </div>
+      <div class="quick-links">
+        <span style="color: #666; margin-right: 0.5rem;">Quick:</span>
+        <a class="quick-link" href="#" onclick="setUrl('https://github.com'); return false;">GitHub</a>
+        <a class="quick-link" href="#" onclick="setUrl('https://vercel.com'); return false;">Vercel</a>
+        <a class="quick-link" href="#" onclick="setUrl('https://nextjs.org'); return false;">Next.js</a>
+        <a class="quick-link" href="#" onclick="setUrl('localhost:3000'); return false;">Localhost</a>
+      </div>
+    </div>
+
+    <div class="cta">
+      <a href="https://s12eh1dx2vs1-d.space.z.ai/" class="btn btn-primary">Launch Full App →</a>
+      <a href="https://github.com/Dauptr/s12eh1dx2vs1-d-space-z-ai" class="btn btn-secondary">View Source</a>
+    </div>
 
     <div class="features">
       <div class="feature">
@@ -173,5 +263,42 @@
       </a>
     </footer>
   </div>
+
+  <script>
+    function setUrl(url) {
+      document.getElementById('targetUrl').value = url;
+    }
+    
+    function openPreview() {
+      const url = document.getElementById('targetUrl').value.trim();
+      if (!url) {
+        alert('Please enter a URL');
+        return;
+      }
+      
+      // Normalize URL
+      let targetUrl = url;
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        if (url.startsWith('localhost') || url.startsWith('127.0.0.1') || url.match(/^\d+\./)) {
+          targetUrl = 'http://' + url;
+        } else {
+          targetUrl = 'https://' + url;
+        }
+      }
+      
+      // Open in live app with URL parameter
+      window.location.href = 'https://s12eh1dx2vs1-d.space.z.ai/?url=' + encodeURIComponent(targetUrl);
+    }
+    
+    // Handle Enter key
+    document.getElementById('targetUrl').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        openPreview();
+      }
+    });
+    
+    // Auto-focus input
+    document.getElementById('targetUrl').focus();
+  </script>
 </body>
 </html>

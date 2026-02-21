@@ -377,6 +377,19 @@ export default function MindKeyPage() {
     }
   }, [addLog]);
 
+  // Auto-load URL from query parameter
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const targetUrl = params.get('url');
+    if (targetUrl) {
+      setUrl(targetUrl);
+      // Auto-load after a short delay
+      setTimeout(() => {
+        loadUrl(targetUrl);
+      }, 500);
+    }
+  }, [loadUrl]);
+
   return (
     <div className="h-screen flex overflow-hidden">
       {/* Animated Grid Background */}
