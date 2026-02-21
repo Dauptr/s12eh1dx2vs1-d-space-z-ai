@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mind Key - Universal Access Engine</title>
+  <meta name="description" content="Browse, preview, and deploy any URL including localhost and z.ai workspaces">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #16213e 100%);
+      min-height: 100vh;
+      color: #e0e0e0;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    header {
+      text-align: center;
+      padding: 4rem 0;
+    }
+    .logo {
+      font-size: 3rem;
+      font-weight: bold;
+      background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 1rem;
+    }
+    .tagline {
+      font-size: 1.2rem;
+      color: #888;
+      margin-bottom: 2rem;
+    }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 2rem;
+      margin: 3rem 0;
+    }
+    .feature {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 2rem;
+      transition: transform 0.3s, border-color 0.3s;
+    }
+    .feature:hover {
+      transform: translateY(-4px);
+      border-color: #00d4ff;
+    }
+    .feature-icon {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+    }
+    .feature h3 {
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+      color: #fff;
+    }
+    .feature p {
+      color: #888;
+      line-height: 1.6;
+    }
+    .cta {
+      text-align: center;
+      margin: 3rem 0;
+    }
+    .btn {
+      display: inline-block;
+      padding: 1rem 2.5rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 12px;
+      transition: all 0.3s;
+      margin: 0.5rem;
+    }
+    .btn-primary {
+      background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      transform: scale(1.05);
+      box-shadow: 0 10px 40px rgba(0, 212, 255, 0.3);
+    }
+    .btn-secondary {
+      background: transparent;
+      border: 2px solid #00d4ff;
+      color: #00d4ff;
+    }
+    .btn-secondary:hover {
+      background: rgba(0, 212, 255, 0.1);
+    }
+    .github-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      color: #888;
+      text-decoration: none;
+    }
+    .github-link:hover { color: #00d4ff; }
+    footer {
+      text-align: center;
+      padding: 2rem;
+      color: #666;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      margin-top: 4rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">🔑 Mind Key</div>
+      <p class="tagline">Universal Access Engine - Browse, Clone & Deploy Any URL</p>
+      <div class="cta">
+        <a href="https://s12eh1dx2vs1-d.space.z.ai/" class="btn btn-primary">Launch App →</a>
+        <a href="https://github.com/Dauptr/s12eh1dx2vs1-d-space-z-ai" class="btn btn-secondary">View Source</a>
+      </div>
+    </header>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">🔍</div>
+        <h3>Scan</h3>
+        <p>Analyze any URL to detect frameworks, dependencies, and assets. Get detailed insights about the technology stack.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📋</div>
+        <h3>Clone</h3>
+        <p>Clone websites and assets locally. Download complete projects with all resources for offline development.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📦</div>
+        <h3>Build</h3>
+        <p>Generate production-ready builds. Support for Next.js, React, Vue, and static sites with Docker configs.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🚀</div>
+        <h3>Deploy</h3>
+        <p>One-click deploy to GitHub Pages. Automatic CI/CD with GitHub Actions for seamless deployments.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">💻</div>
+        <h3>Terminal</h3>
+        <p>Run npm/bun commands directly in browser. Install dependencies, build, and start servers online.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🌐</div>
+        <h3>Localhost Access</h3>
+        <p>Access and preview local development servers. Full support for z.ai workspaces and localhost URLs.</p>
+      </div>
+    </div>
+
+    <div class="cta">
+      <p style="margin-bottom: 1rem; color: #888;">This is a static landing page. For full functionality, use the live app:</p>
+      <a href="https://s12eh1dx2vs1-d.space.z.ai/" class="btn btn-primary">Open Live App</a>
+    </div>
+
+    <footer>
+      <p>Mind Key - Universal Access Engine</p>
+      <a href="https://github.com/Dauptr/s12eh1dx2vs1-d-space-z-ai" class="github-link">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+        </svg>
+        View on GitHub
+      </a>
+    </footer>
+  </div>
+</body>
+</html>
