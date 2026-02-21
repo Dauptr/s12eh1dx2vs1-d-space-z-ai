@@ -417,6 +417,9 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
         setTerminalOutput(prev => [...prev, `[${new Date().toLocaleTimeString()}] ✅ Command completed`]);
       } else {
         setTerminalOutput(prev => [...prev, `  ❌ Error: ${data.error}`]);
+        if (data.suggestion) {
+          setTerminalOutput(prev => [...prev, `  💡 ${data.suggestion}`]);
+        }
       }
     } catch (err) {
       setTerminalOutput(prev => [...prev, `  ❌ Failed to execute command`]);
@@ -747,13 +750,12 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
               <div className="flex items-center gap-2 text-sm">
                 <button 
                   onClick={async () => {
-                    await runCommand('install');
-                    setTimeout(() => runCommand('build'), 2000);
+                    await runCommand('build');
                   }}
                   disabled={isRunning}
                   className="btn-mind text-xs"
                 >
-                  Install <ArrowRight className="w-3 h-3 inline mx-1" /> Build
+                  Build Project
                 </button>
                 <span className="text-[var(--text-muted)]">then</span>
                 <button 
@@ -763,6 +765,9 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
                   Deploy to GitHub
                 </button>
               </div>
+              <p className="text-xs text-[var(--text-muted)] mt-2">
+                💡 Dependencies are pre-installed. Memory-intensive commands may timeout.
+              </p>
             </div>
             
             {/* Terminal Output */}
