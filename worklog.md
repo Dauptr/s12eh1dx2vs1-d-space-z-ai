@@ -589,3 +589,56 @@ The "Cannot access 't' before initialization" error was caused by:
 - ESLint: ✅ Pass
 - Build: ✅ Successful
 - Ready for testing
+
+---
+## Task ID: build-deploy-feature - main-agent
+### Work Task
+Add "Build & Deploy" feature with GitHub Actions for automatic build and deploy.
+
+### New Features Added
+
+#### 1. Build & Deploy Option
+- Checkbox to enable GitHub Actions auto-build
+- Automatically runs: `npm install` → `npm run build` → deploy
+- Creates `.github/workflows/deploy.yml` in the repository
+
+#### 2. Enhanced Deploy API
+- Added `buildAndDeploy` parameter
+- Added `framework` parameter
+- Generates GitHub Actions workflow based on framework:
+  - Next.js: builds and exports to `./out`
+  - React/Vue: builds to `./dist`
+  - Static: deploys directly
+
+#### 3. Improved Results Display
+- Shows live site URL
+- Shows GitHub Actions progress link
+- Shows next steps for user
+- Color-coded links (green for live, blue for Actions)
+
+#### 4. Updated CLI Commands
+- Now includes `npm install` step
+- Includes `npm run build` step for frameworks
+
+### Files Modified
+- `/src/app/api/deploy/route.ts` - Added buildAndDeploy support
+- `/src/components/ClonePanel.tsx` - Added UI for build & deploy
+
+### How It Works
+
+**For Static Sites:**
+1. Deploy files directly
+2. Site is live immediately
+
+**For Frameworks (Next.js/React/Vue):**
+1. Enable "Build & Deploy with GitHub Actions"
+2. Click Deploy
+3. GitHub Actions automatically:
+   - Runs `npm install`
+   - Runs `npm run build`
+   - Deploys the output to GitHub Pages
+4. Site is live in 1-2 minutes
+
+### Verification
+- ESLint: ✅ Pass
+- Build: ✅ Successful

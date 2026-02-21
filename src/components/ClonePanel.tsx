@@ -21,6 +21,9 @@ import {
   Container,
   Globe,
   Zap,
+  Terminal,
+  Play,
+  ArrowRight,
 } from 'lucide-react';
 
 interface ScanResult {
@@ -45,6 +48,25 @@ interface ScanResult {
   nodeVersion: string;
   buildSize: string;
   timestamp: number;
+}
+
+interface DeployResult {
+  success: boolean;
+  requiresAuth?: boolean;
+  repoUrl?: string;
+  pagesUrl?: string;
+  message?: string;
+  error?: string;
+  details?: string;
+  owner?: string;
+  repo?: string;
+  filesPushed?: number;
+  filesSkipped?: number;
+  cliCommands?: string;
+  nextSteps?: string[];
+  actionsUrl?: string;
+  framework?: string;
+  buildAndDeploy?: boolean;
 }
 
 interface BuildConfig {
@@ -72,37 +94,39 @@ const NODE_VERSIONS = [
 ];
 
 // Helper function to generate CLI commands
-function generateCliCommands(projectName: string): string {
+function generateCliCommands(projectName: string, framework: string = 'static'): string {
+  const buildCmd = framework === 'static' ? '' : 'npm run build';
+  
   return `# === MIND KEY DEPLOY COMMANDS ===
 
-# 1. Download ZIP from Mind Key first
-
-# 2. Extract and navigate
+# 1. Download and extract
 unzip ${projectName}.zip
 cd ${projectName}
 
-# 3. Initialize git
+# 2. Install dependencies
+npm install
+
+# 3. Build for production
+${buildCmd || '# No build needed for static site'}
+
+# 4. Initialize git
 git init
 git branch -M main
-
-# 4. Commit files
 git add .
 git commit -m "Deploy from Mind Key"
 
-# 5. Add remote (replace YOUR_USERNAME)
+# 5. Push to GitHub
 git remote add origin https://github.com/YOUR_USERNAME/${projectName}.git
-
-# 6. Push to GitHub
 git push -u origin main --force
 
-# 7. Enable GitHub Pages
+# 6. Enable GitHub Pages
 # Go to: Settings > Pages > Source: main branch
 
 # Your site: https://YOUR_USERNAME.github.io/${projectName}/`.trim();
 }
 
 export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelProps) {
-  const [activeTab, setActiveTab] = useState<'scan' | 'clone' | 'build' | 'deploy'>('scan');
+  const [activeTab, setActiveTab] = useState<'scan' | 'clone' | 'build' | 'deploy' | 'terminal'>('scan');
   const [isLoading, setIsLoading] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [clonedFiles, setClonedFiles] = useState<{ path: string; content: string }[]>([]);
@@ -113,20 +137,13 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
   const [githubToken, setGithubToken] = useState('');
   const [targetRepo, setTargetRepo] = useState('');
   const [showCliCommands, setShowCliCommands] = useState(false);
-  const [deployResult, setDeployResult] = useState<{
-    success: boolean;
-    requiresAuth?: boolean;
-    repoUrl?: string;
-    pagesUrl?: string;
-    message?: string;
-    error?: string;
-    details?: string;
-    owner?: string;
-    repo?: string;
-    filesPushed?: number;
-    filesSkipped?: number;
-    cliCommands?: string;
-  } | null>(null);
+  const [deployResult, setDeployResult] = useState<DeployResult | null>(null);
+  const [buildAndDeploy, setBuildAndDeploy] = useState(true);
+  
+  // Terminal state
+  const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [packageManager, setPackageManager] = useState<'bun' | 'npm'>('bun');
 
   const [buildConfig, setBuildConfig] = useState<BuildConfig>({
     projectName: 'my-project',
@@ -329,6 +346,8 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
           githubToken: githubToken || undefined,
           targetRepo: targetRepo || undefined,
           description: `Cloned from ${url}`,
+          buildAndDeploy: buildAndDeploy,
+          framework: buildConfig.framework,
         }),
       });
       const data = await response.json();
@@ -348,25 +367,77 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
     } finally {
       setIsLoading(false);
     }
-  }, [buildFiles, clonedFiles, buildConfig.projectName, githubToken, targetRepo, url]);
+  }, [buildFiles, clonedFiles, buildConfig.projectName, buildConfig.framework, githubToken, targetRepo, url, buildAndDeploy]);
 
   const handleCopyCliCommands = useCallback(() => {
-    const commands = deployResult?.cliCommands || generateCliCommands(buildConfig.projectName);
+    const commands = deployResult?.cliCommands || generateCliCommands(buildConfig.projectName, buildConfig.framework);
     navigator.clipboard.writeText(commands);
     setSuccess('CLI commands copied to clipboard!');
-  }, [deployResult, buildConfig.projectName]);
+  }, [deployResult, buildConfig.projectName, buildConfig.framework]);
 
   // Get current files
   const currentFiles = buildFiles.length > 0 ? buildFiles : clonedFiles;
 
+  // Fetch package manager info on mount
+  useEffect(() => {
+    fetch('/api/terminal')
+      .then(res => res.json())
+      .then(data => {
+        if (data.projectInfo?.packageManager) {
+          setPackageManager(data.projectInfo.packageManager);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Terminal command executor
+  const runCommand = useCallback(async (command: 'install' | 'dev' | 'build' | 'start') => {
+    setIsRunning(true);
+    const timestamp = new Date().toLocaleTimeString();
+    const cmdStr = command === 'install' 
+      ? `${packageManager} install` 
+      : `${packageManager} run ${command}`;
+    setTerminalOutput(prev => [...prev, `[${timestamp}] Running: ${cmdStr}...`]);
+    
+    try {
+      const response = await fetch('/api/terminal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command }),
+      });
+      const data = await response.json();
+      
+      if (data.packageManager) {
+        setPackageManager(data.packageManager);
+      }
+      
+      if (data.success) {
+        const lines = data.output.split('\n');
+        setTerminalOutput(prev => [...prev, ...lines.map((l: string) => `  ${l}`)]);
+        setTerminalOutput(prev => [...prev, `[${new Date().toLocaleTimeString()}] ✅ Command completed`]);
+      } else {
+        setTerminalOutput(prev => [...prev, `  ❌ Error: ${data.error}`]);
+      }
+    } catch (err) {
+      setTerminalOutput(prev => [...prev, `  ❌ Failed to execute command`]);
+    } finally {
+      setIsRunning(false);
+    }
+  }, [packageManager]);
+  
+  const clearTerminal = useCallback(() => {
+    setTerminalOutput([]);
+  }, []);
+
   // Render tab button with icon - using explicit components
-  const renderTabButton = (tabId: 'scan' | 'clone' | 'build' | 'deploy', label: string) => {
+  const renderTabButton = (tabId: 'scan' | 'clone' | 'build' | 'deploy' | 'terminal', label: string) => {
     let Icon: React.ComponentType<{ className?: string }>;
     switch (tabId) {
       case 'scan': Icon = Scan; break;
       case 'clone': Icon = Copy; break;
       case 'build': Icon = Package; break;
       case 'deploy': Icon = Github; break;
+      case 'terminal': Icon = Terminal; break;
     }
     
     return (
@@ -392,6 +463,7 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
         {renderTabButton('clone', 'Clone')}
         {renderTabButton('build', 'Build')}
         {renderTabButton('deploy', 'Deploy')}
+        {renderTabButton('terminal', 'Terminal')}
         
         {isLoading && (
           <div className="ml-auto flex items-center gap-2 px-4 text-[var(--accent-primary)]">
@@ -618,6 +690,146 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
           </div>
         )}
 
+        {/* Terminal Tab */}
+        {activeTab === 'terminal' && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs text-[var(--text-muted)]">Package Manager:</span>
+              <span className="text-xs px-2 py-0.5 bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] rounded">{packageManager}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button 
+                onClick={() => runCommand('install')} 
+                disabled={isRunning}
+                className="btn-mind flex items-center gap-2"
+              >
+                {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
+                {packageManager} install
+              </button>
+              <button 
+                onClick={() => runCommand('dev')} 
+                disabled={isRunning}
+                className="btn-ghost flex items-center gap-2"
+              >
+                <Play className="w-4 h-4" />
+                {packageManager} run dev
+              </button>
+              <button 
+                onClick={() => runCommand('build')} 
+                disabled={isRunning}
+                className="btn-ghost flex items-center gap-2"
+              >
+                <Package className="w-4 h-4" />
+                {packageManager} run build
+              </button>
+              <button 
+                onClick={() => runCommand('start')} 
+                disabled={isRunning}
+                className="btn-ghost flex items-center gap-2"
+              >
+                <Server className="w-4 h-4" />
+                {packageManager} start
+              </button>
+              <button 
+                onClick={clearTerminal}
+                className="btn-ghost text-xs"
+              >
+                Clear
+              </button>
+            </div>
+            
+            {/* Quick Deploy Section */}
+            <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/30 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-purple-400 font-medium mb-2">
+                <Zap className="w-4 h-4" />
+                Quick Deploy Pipeline
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <button 
+                  onClick={async () => {
+                    await runCommand('install');
+                    setTimeout(() => runCommand('build'), 2000);
+                  }}
+                  disabled={isRunning}
+                  className="btn-mind text-xs"
+                >
+                  Install <ArrowRight className="w-3 h-3 inline mx-1" /> Build
+                </button>
+                <span className="text-[var(--text-muted)]">then</span>
+                <button 
+                  onClick={() => setActiveTab('deploy')}
+                  className="btn-ghost text-xs"
+                >
+                  Deploy to GitHub
+                </button>
+              </div>
+            </div>
+            
+            {/* Terminal Output */}
+            <div className="bg-[var(--bg-primary)] rounded-lg p-4 font-mono text-sm">
+              <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-2 border-b border-[var(--border-color)] pb-2">
+                <Terminal className="w-4 h-4" />
+                Console Output
+              </div>
+              <div className="max-h-64 overflow-y-auto space-y-0.5">
+                {terminalOutput.length === 0 ? (
+                  <div className="text-[var(--text-muted)] text-xs">
+                    Click a command above to start...
+                  </div>
+                ) : (
+                  terminalOutput.map((line, i) => (
+                    <div 
+                      key={i} 
+                      className={`text-xs whitespace-pre-wrap ${
+                        line.includes('❌') ? 'text-red-400' : 
+                        line.includes('✅') ? 'text-green-400' : 
+                        line.startsWith('[') ? 'text-yellow-400' : 
+                        'text-[var(--text-secondary)]'
+                      }`}
+                    >
+                      {line}
+                    </div>
+                  ))
+                )}
+                {isRunning && (
+                  <div className="text-yellow-400 text-xs animate-pulse">
+                    Running...
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* GitHub Deployment Link */}
+            {deployResult?.pagesUrl && (
+              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-green-400 font-medium flex items-center gap-2">
+                      <Globe className="w-4 h-4" />
+                      Live Deployment
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                      Your site is live at:
+                    </p>
+                  </div>
+                  <a 
+                    href={deployResult.pagesUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+                  >
+                    View Live Site
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                </div>
+                <code className="text-xs bg-[var(--bg-primary)] px-2 py-1 rounded mt-2 block">
+                  {deployResult.pagesUrl}
+                </code>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Deploy Tab */}
         {activeTab === 'deploy' && (
           <div className="space-y-4">
@@ -664,10 +876,30 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
               </p>
             </div>
 
+            {/* Build & Deploy Option */}
+            {buildConfig.framework !== 'static' && (
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={buildAndDeploy}
+                    onChange={(e) => setBuildAndDeploy(e.target.checked)}
+                    className="accent-[var(--accent-primary)] w-4 h-4"
+                  />
+                  <div>
+                    <span className="text-blue-400 font-medium">Build & Deploy with GitHub Actions</span>
+                    <p className="text-xs text-blue-300/70 mt-0.5">
+                      Automatically runs: npm install → npm run build → deploy
+                    </p>
+                  </div>
+                </label>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2">
               <button onClick={handleDeploy} disabled={isLoading || currentFiles.length === 0} className="btn-mind flex items-center gap-2">
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Github className="w-4 h-4" />}
-                {githubToken ? 'Deploy to GitHub' : 'Get CLI Commands'}
+                {githubToken ? (buildAndDeploy && buildConfig.framework !== 'static' ? 'Build & Deploy' : 'Deploy to GitHub') : 'Get CLI Commands'}
               </button>
               <button onClick={() => setShowCliCommands(!showCliCommands)} className="btn-ghost flex items-center gap-2">
                 <Server className="w-4 h-4" />
@@ -690,7 +922,7 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
                   </button>
                 </div>
                 <pre className="text-xs bg-[var(--bg-primary)] p-3 rounded overflow-x-auto whitespace-pre-wrap text-green-400 font-mono">
-{deployResult?.cliCommands || generateCliCommands(buildConfig.projectName)}
+{deployResult?.cliCommands || generateCliCommands(buildConfig.projectName, buildConfig.framework)}
                 </pre>
               </div>
             )}
@@ -701,7 +933,7 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 text-green-400">
                       <CheckCircle className="w-5 h-5" />
-                      <span className="font-medium">✅ Deployed Successfully!</span>
+                      <span className="font-medium">✅ {deployResult.message || 'Deployed Successfully!'}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       {deployResult.owner && (
@@ -717,21 +949,43 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
                         </div>
                       )}
                     </div>
-                    {deployResult.repoUrl && (
-                      <a href={deployResult.repoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-[var(--accent-primary)] hover:underline bg-[var(--bg-primary)] px-3 py-2 rounded">
-                        <Github className="w-4 h-4" />
-                        View Repository
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
+                    
+                    {/* Links */}
+                    <div className="flex flex-wrap gap-2">
+                      {deployResult.repoUrl && (
+                        <a href={deployResult.repoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-[var(--accent-primary)] hover:underline bg-[var(--bg-primary)] px-3 py-2 rounded">
+                          <Github className="w-4 h-4" />
+                          View Repository
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                      {deployResult.pagesUrl && (
+                        <a href={deployResult.pagesUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-green-400 hover:underline bg-green-500/10 px-3 py-2 rounded border border-green-500/30">
+                          <Globe className="w-4 h-4" />
+                          View Live Site
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                      {deployResult.actionsUrl && (
+                        <a href={deployResult.actionsUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-blue-400 hover:underline bg-blue-500/10 px-3 py-2 rounded border border-blue-500/30">
+                          <Zap className="w-4 h-4" />
+                          View Build Progress
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                    
+                    {/* Next Steps */}
+                    {deployResult.nextSteps && deployResult.nextSteps.length > 0 && (
+                      <div className="bg-[var(--bg-primary)] rounded p-3">
+                        <div className="text-xs font-medium text-[var(--text-muted)] mb-2">📋 Next Steps:</div>
+                        <ol className="list-decimal list-inside text-xs text-[var(--text-secondary)] space-y-1">
+                          {deployResult.nextSteps.map((step, i) => (
+                            <li key={i}>{step}</li>
+                          ))}
+                        </ol>
+                      </div>
                     )}
-                    {deployResult.pagesUrl && (
-                      <a href={deployResult.pagesUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-[var(--accent-primary)] hover:underline bg-[var(--bg-primary)] px-3 py-2 rounded">
-                        <Globe className="w-4 h-4" />
-                        View Live Site
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
-                    <p className="text-xs text-green-300">{deployResult.message}</p>
                   </div>
                 ) : deployResult.requiresAuth ? (
                   <div className="space-y-3">
