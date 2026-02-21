@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Scan,
   Copy,
@@ -62,6 +62,45 @@ interface ClonePanelProps {
   isWorkspace: boolean;
 }
 
+const NODE_VERSIONS = [
+  '14.21.3',
+  '16.20.2',
+  '17.9.1',
+  '18.19.0',
+  '20.11.0',
+  '21.6.2',
+];
+
+// Helper function to generate CLI commands
+function generateCliCommands(projectName: string): string {
+  return `# === MIND KEY DEPLOY COMMANDS ===
+
+# 1. Download ZIP from Mind Key first
+
+# 2. Extract and navigate
+unzip ${projectName}.zip
+cd ${projectName}
+
+# 3. Initialize git
+git init
+git branch -M main
+
+# 4. Commit files
+git add .
+git commit -m "Deploy from Mind Key"
+
+# 5. Add remote (replace YOUR_USERNAME)
+git remote add origin https://github.com/YOUR_USERNAME/${projectName}.git
+
+# 6. Push to GitHub
+git push -u origin main --force
+
+# 7. Enable GitHub Pages
+# Go to: Settings > Pages > Source: main branch
+
+# Your site: https://YOUR_USERNAME.github.io/${projectName}/`.trim();
+}
+
 export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelProps) {
   const [activeTab, setActiveTab] = useState<'scan' | 'clone' | 'build' | 'deploy'>('scan');
   const [isLoading, setIsLoading] = useState(false);
@@ -71,6 +110,23 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [githubToken, setGithubToken] = useState('');
+  const [targetRepo, setTargetRepo] = useState('');
+  const [showCliCommands, setShowCliCommands] = useState(false);
+  const [deployResult, setDeployResult] = useState<{
+    success: boolean;
+    requiresAuth?: boolean;
+    repoUrl?: string;
+    pagesUrl?: string;
+    message?: string;
+    error?: string;
+    details?: string;
+    owner?: string;
+    repo?: string;
+    filesPushed?: number;
+    filesSkipped?: number;
+    cliCommands?: string;
+  } | null>(null);
 
   const [buildConfig, setBuildConfig] = useState<BuildConfig>({
     projectName: 'my-project',
@@ -79,24 +135,6 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
     includeDocker: true,
     includeGithubActions: true,
   });
-
-  const [githubToken, setGithubToken] = useState('');
-  const [deployResult, setDeployResult] = useState<{
-    success: boolean;
-    repoUrl?: string;
-    pagesUrl?: string;
-    message?: string;
-    instructions?: any;
-  } | null>(null);
-
-  const nodeVersions = [
-    '14.21.3',
-    '16.20.2',
-    '17.9.1',
-    '18.19.0',
-    '20.11.0',
-    '21.6.2',
-  ];
 
   // Auto-generate project name from URL
   useEffect(() => {
@@ -108,14 +146,13 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
           .replace(/[^a-z0-9-]/gi, '')
           .toLowerCase();
         setBuildConfig(prev => ({ ...prev, projectName: name }));
-      } catch {}
+      } catch { /* ignore */ }
     }
   }, [url]);
 
-  // Scan target
-  const handleScan = async () => {
+  // Handlers
+  const handleScan = useCallback(async () => {
     if (!url) return;
-    
     setIsLoading(true);
     setError(null);
     setSuccess(null);
@@ -127,8 +164,6 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
       if (response.ok) {
         setScanResult(data);
         setSuccess('Scan completed successfully!');
-        
-        // Auto-detect framework
         if (data.frameworks?.includes('Next.js')) {
           setBuildConfig(prev => ({ ...prev, framework: 'nextjs' }));
         } else if (data.frameworks?.includes('React')) {
@@ -139,17 +174,15 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
       } else {
         setError(data.error || 'Scan failed');
       }
-    } catch (e) {
+    } catch {
       setError('Failed to scan target');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [url]);
 
-  // Clone target
-  const handleClone = async () => {
+  const handleClone = useCallback(async () => {
     if (!url) return;
-    
     setIsLoading(true);
     setError(null);
     
@@ -159,7 +192,6 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, includeAssets: true }),
       });
-      
       const data = await response.json();
       
       if (response.ok && data.success) {
@@ -168,36 +200,28 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
       } else {
         setError(data.error || 'Clone failed');
       }
-    } catch (e) {
+    } catch {
       setError('Failed to clone target');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [url]);
 
-  // Generate build
-  const handleBuild = async () => {
+  const handleBuild = useCallback(async () => {
     if (!html && clonedFiles.length === 0) {
       setError('No content to build. Please scan or clone first.');
       return;
     }
-    
     setIsLoading(true);
     setError(null);
     
     try {
       const mainHtml = clonedFiles.find(f => f.path === 'index.html')?.content || html;
-      
       const response = await fetch('/api/build', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url,
-          html: mainHtml,
-          config: buildConfig,
-        }),
+        body: JSON.stringify({ url, html: mainHtml, config: buildConfig }),
       });
-      
       const data = await response.json();
       
       if (response.ok && data.success) {
@@ -206,108 +230,93 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
       } else {
         setError(data.error || 'Build failed');
       }
-    } catch (e) {
+    } catch {
       setError('Failed to generate build');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [html, clonedFiles, url, buildConfig]);
 
-  // Download as ZIP
-  const handleDownloadZip = async () => {
+  const handleDownloadZip = useCallback(async () => {
     const files = buildFiles.length > 0 ? buildFiles : clonedFiles;
     if (files.length === 0) {
       setError('No files to download. Please build first.');
       return;
     }
-    
     setIsLoading(true);
     
     try {
       const response = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          files,
-          projectName: buildConfig.projectName,
-          type: 'zip',
-        }),
+        body: JSON.stringify({ files, projectName: buildConfig.projectName, type: 'zip' }),
       });
       
       if (response.ok) {
         const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
+        const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
+        a.href = blobUrl;
         a.download = `${buildConfig.projectName}.zip`;
         a.click();
-        URL.revokeObjectURL(url);
+        URL.revokeObjectURL(blobUrl);
         setSuccess('ZIP downloaded successfully!');
       } else {
         const data = await response.json();
         setError(data.error || 'Download failed');
       }
-    } catch (e) {
+    } catch {
       setError('Failed to download ZIP');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [buildFiles, clonedFiles, buildConfig.projectName]);
 
-  // Download as single HTML
-  const handleDownloadHtml = async () => {
+  const handleDownloadHtml = useCallback(async () => {
     const mainHtml = clonedFiles.find(f => f.path === 'index.html')?.content || 
-                     buildFiles.find(f => f.path === 'index.html')?.content || 
-                     html;
-    
+                     buildFiles.find(f => f.path === 'index.html')?.content || html;
     if (!mainHtml) {
       setError('No HTML content to download.');
       return;
     }
-    
     setIsLoading(true);
     
     try {
       const response = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          files: [{ path: 'index.html', content: mainHtml }],
-          projectName: buildConfig.projectName,
-          type: 'html',
-        }),
+        body: JSON.stringify({ files: [{ path: 'index.html', content: mainHtml }], projectName: buildConfig.projectName, type: 'html' }),
       });
       
       if (response.ok) {
         const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
+        const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
+        a.href = blobUrl;
         a.download = `${buildConfig.projectName}.html`;
         a.click();
-        URL.revokeObjectURL(url);
+        URL.revokeObjectURL(blobUrl);
         setSuccess('HTML downloaded successfully!');
       } else {
         const data = await response.json();
         setError(data.error || 'Download failed');
       }
-    } catch (e) {
+    } catch {
       setError('Failed to download HTML');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [clonedFiles, buildFiles, html, buildConfig.projectName]);
 
-  // Deploy to GitHub
-  const handleDeploy = async () => {
+  const handleDeploy = useCallback(async () => {
     const files = buildFiles.length > 0 ? buildFiles : clonedFiles;
     if (files.length === 0) {
       setError('No files to deploy. Please build first.');
       return;
     }
-    
     setIsLoading(true);
     setError(null);
+    setSuccess(null);
     setDeployResult(null);
     
     try {
@@ -318,54 +327,72 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
           files,
           repoName: buildConfig.projectName,
           githubToken: githubToken || undefined,
+          targetRepo: targetRepo || undefined,
           description: `Cloned from ${url}`,
         }),
       });
-      
       const data = await response.json();
       setDeployResult(data);
       
-      if (data.success) {
+      if (data.success === true) {
         setSuccess(data.message || 'Deployed successfully!');
       } else if (data.requiresAuth) {
-        // Show auth instructions
+        setError('GitHub token required for automatic deployment');
+        setShowCliCommands(true);
       } else {
         setError(data.error || 'Deploy failed');
+        if (data.cliCommands) setShowCliCommands(true);
       }
-    } catch (e) {
+    } catch {
       setError('Failed to deploy');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [buildFiles, clonedFiles, buildConfig.projectName, githubToken, targetRepo, url]);
 
-  const tabs = [
-    { id: 'scan', label: 'Scan', icon: Scan },
-    { id: 'clone', label: 'Clone', icon: Copy },
-    { id: 'build', label: 'Build', icon: Package },
-    { id: 'deploy', label: 'Deploy', icon: Github },
-  ];
+  const handleCopyCliCommands = useCallback(() => {
+    const commands = deployResult?.cliCommands || generateCliCommands(buildConfig.projectName);
+    navigator.clipboard.writeText(commands);
+    setSuccess('CLI commands copied to clipboard!');
+  }, [deployResult, buildConfig.projectName]);
+
+  // Get current files
+  const currentFiles = buildFiles.length > 0 ? buildFiles : clonedFiles;
+
+  // Render tab button with icon - using explicit components
+  const renderTabButton = (tabId: 'scan' | 'clone' | 'build' | 'deploy', label: string) => {
+    let Icon: React.ComponentType<{ className?: string }>;
+    switch (tabId) {
+      case 'scan': Icon = Scan; break;
+      case 'clone': Icon = Copy; break;
+      case 'build': Icon = Package; break;
+      case 'deploy': Icon = Github; break;
+    }
+    
+    return (
+      <button
+        onClick={() => setActiveTab(tabId)}
+        className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+          activeTab === tabId
+            ? 'border-[var(--accent-primary)] text-[var(--accent-primary)]'
+            : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+        }`}
+      >
+        <Icon className="w-4 h-4" />
+        {label}
+      </button>
+    );
+  };
 
   return (
     <div className="bg-[var(--bg-secondary)] border-b border-[var(--border-color)]">
       {/* Tab Navigation */}
       <div className="flex items-center border-b border-[var(--border-color)]">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as typeof activeTab)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
-              activeTab === tab.id
-                ? 'border-[var(--accent-primary)] text-[var(--accent-primary)]'
-                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
+        {renderTabButton('scan', 'Scan')}
+        {renderTabButton('clone', 'Clone')}
+        {renderTabButton('build', 'Build')}
+        {renderTabButton('deploy', 'Deploy')}
         
-        {/* Status Messages */}
         {isLoading && (
           <div className="ml-auto flex items-center gap-2 px-4 text-[var(--accent-primary)]">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -397,15 +424,10 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
         {activeTab === 'scan' && (
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <button
-                onClick={handleScan}
-                disabled={isLoading || !url}
-                className="btn-mind flex items-center gap-2"
-              >
+              <button onClick={handleScan} disabled={isLoading || !url} className="btn-mind flex items-center gap-2">
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scan className="w-4 h-4" />}
                 Scan Target
               </button>
-              
               {!isConnected && (
                 <span className="text-sm text-[var(--text-muted)]">
                   <AlertCircle className="w-4 h-4 inline mr-1" />
@@ -416,13 +438,10 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
 
             {scanResult && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-                {/* Title */}
                 <div className="bg-[var(--bg-tertiary)] rounded-lg p-4">
                   <div className="text-xs text-[var(--text-muted)] mb-1">Title</div>
                   <div className="text-sm font-medium truncate">{scanResult.title || 'N/A'}</div>
                 </div>
-                
-                {/* Frameworks */}
                 <div className="bg-[var(--bg-tertiary)] rounded-lg p-4">
                   <div className="text-xs text-[var(--text-muted)] mb-1">Frameworks</div>
                   <div className="flex flex-wrap gap-1">
@@ -437,8 +456,6 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
                     )}
                   </div>
                 </div>
-                
-                {/* Assets */}
                 <div className="bg-[var(--bg-tertiary)] rounded-lg p-4">
                   <div className="text-xs text-[var(--text-muted)] mb-1">Assets</div>
                   <div className="grid grid-cols-3 gap-2 text-xs">
@@ -447,8 +464,6 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
                     <div>IMG: {scanResult.assets.images}</div>
                   </div>
                 </div>
-                
-                {/* Build Size */}
                 <div className="bg-[var(--bg-tertiary)] rounded-lg p-4">
                   <div className="text-xs text-[var(--text-muted)] mb-1">Est. Size</div>
                   <div className="text-sm font-medium">{scanResult.buildSize}</div>
@@ -461,16 +476,10 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
         {/* Clone Tab */}
         {activeTab === 'clone' && (
           <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={handleClone}
-                disabled={isLoading || !url}
-                className="btn-mind flex items-center gap-2"
-              >
-                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
-                Clone Target
-              </button>
-            </div>
+            <button onClick={handleClone} disabled={isLoading || !url} className="btn-mind flex items-center gap-2">
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
+              Clone Target
+            </button>
 
             {clonedFiles.length > 0 && (
               <div className="bg-[var(--bg-tertiary)] rounded-lg p-4">
@@ -491,9 +500,7 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
                     </div>
                   ))}
                   {clonedFiles.length > 20 && (
-                    <div className="text-xs text-[var(--text-muted)]">
-                      +{clonedFiles.length - 20} more files
-                    </div>
+                    <div className="text-xs text-[var(--text-muted)]">+{clonedFiles.length - 20} more</div>
                   )}
                 </div>
               </div>
@@ -504,9 +511,7 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
         {/* Build Tab */}
         {activeTab === 'build' && (
           <div className="space-y-4">
-            {/* Configuration */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Project Name */}
               <div>
                 <label className="block text-xs text-[var(--text-muted)] mb-1">Project Name</label>
                 <input
@@ -517,8 +522,6 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
                   placeholder="my-project"
                 />
               </div>
-              
-              {/* Node Version */}
               <div>
                 <label className="block text-xs text-[var(--text-muted)] mb-1">Node.js Version</label>
                 <select
@@ -526,13 +529,9 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
                   onChange={(e) => setBuildConfig(prev => ({ ...prev, nodeVersion: e.target.value }))}
                   className="input-mind w-full text-sm py-2"
                 >
-                  {nodeVersions.map(v => (
-                    <option key={v} value={v}>{v}</option>
-                  ))}
+                  {NODE_VERSIONS.map(v => <option key={v} value={v}>{v}</option>)}
                 </select>
               </div>
-              
-              {/* Framework */}
               <div>
                 <label className="block text-xs text-[var(--text-muted)] mb-1">Framework</label>
                 <select
@@ -548,16 +547,11 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
               </div>
             </div>
 
-            {/* Advanced Options */}
             <div>
-              <button
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                className="flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              >
+              <button onClick={() => setShowAdvanced(!showAdvanced)} className="flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]">
                 {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                 Advanced Options
               </button>
-              
               {showAdvanced && (
                 <div className="flex gap-4 mt-2">
                   <label className="flex items-center gap-2 text-sm">
@@ -570,7 +564,6 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
                     <Container className="w-4 h-4" />
                     Include Docker
                   </label>
-                  
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -585,33 +578,18 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
               )}
             </div>
 
-            {/* Build Actions */}
             <div className="flex flex-wrap gap-2">
-              <button
-                onClick={handleBuild}
-                disabled={isLoading}
-                className="btn-mind flex items-center gap-2"
-              >
+              <button onClick={handleBuild} disabled={isLoading} className="btn-mind flex items-center gap-2">
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
                 Generate Build
               </button>
-              
-              {buildFiles.length > 0 && (
+              {currentFiles.length > 0 && (
                 <>
-                  <button
-                    onClick={handleDownloadZip}
-                    disabled={isLoading}
-                    className="btn-ghost flex items-center gap-2"
-                  >
+                  <button onClick={handleDownloadZip} disabled={isLoading} className="btn-ghost flex items-center gap-2">
                     <FileArchive className="w-4 h-4" />
                     Download ZIP
                   </button>
-                  
-                  <button
-                    onClick={handleDownloadHtml}
-                    disabled={isLoading}
-                    className="btn-ghost flex items-center gap-2"
-                  >
+                  <button onClick={handleDownloadHtml} disabled={isLoading} className="btn-ghost flex items-center gap-2">
                     <FileCode className="w-4 h-4" />
                     Download HTML
                   </button>
@@ -643,94 +621,168 @@ export function ClonePanel({ url, html, isConnected, isWorkspace }: ClonePanelPr
         {/* Deploy Tab */}
         {activeTab === 'deploy' && (
           <div className="space-y-4">
-            {/* GitHub Token */}
+            {!githubToken && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-yellow-400 font-medium mb-1">
+                  <AlertCircle className="w-4 h-4" />
+                  No GitHub Token Provided
+                </div>
+                <p className="text-xs text-yellow-300/80">
+                  Add your token for automatic deployment, or use CLI commands below.
+                </p>
+              </div>
+            )}
+
             <div>
-              <label className="block text-xs text-[var(--text-muted)] mb-1">
-                GitHub Token (optional - for automatic deploy)
-              </label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Target Repository (optional)</label>
+              <input
+                type="text"
+                value={targetRepo}
+                onChange={(e) => setTargetRepo(e.target.value)}
+                className="input-mind w-full text-sm py-2"
+                placeholder="username/repository (leave empty to create new)"
+              />
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                Format: <code className="bg-[var(--bg-primary)] px-1 rounded">username/repo</code>
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">GitHub Personal Access Token</label>
               <input
                 type="password"
                 value={githubToken}
                 onChange={(e) => setGithubToken(e.target.value)}
                 className="input-mind w-full text-sm py-2"
-                placeholder="ghp_xxxxxxxxxxxx"
+                placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
               />
               <p className="text-xs text-[var(--text-muted)] mt-1">
-                Get your token from GitHub Settings → Developer settings → Personal access tokens
+                <a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener noreferrer" className="text-[var(--accent-primary)] hover:underline">
+                  Create a token →
+                </a>
+                {' '}(needs repo scope)
               </p>
             </div>
 
-            {/* Deploy Actions */}
             <div className="flex flex-wrap gap-2">
-              <button
-                onClick={handleDeploy}
-                disabled={isLoading || (buildFiles.length === 0 && clonedFiles.length === 0)}
-                className="btn-mind flex items-center gap-2"
-              >
+              <button onClick={handleDeploy} disabled={isLoading || currentFiles.length === 0} className="btn-mind flex items-center gap-2">
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Github className="w-4 h-4" />}
-                Deploy to GitHub
+                {githubToken ? 'Deploy to GitHub' : 'Get CLI Commands'}
               </button>
+              <button onClick={() => setShowCliCommands(!showCliCommands)} className="btn-ghost flex items-center gap-2">
+                <Server className="w-4 h-4" />
+                {showCliCommands ? 'Hide' : 'Show'} CLI
+              </button>
+              {currentFiles.length === 0 && (
+                <span className="text-xs text-[var(--text-muted)] flex items-center">
+                  Build or clone first to enable deployment
+                </span>
+              )}
             </div>
 
-            {/* Deploy Result */}
+            {showCliCommands && (
+              <div className="bg-[var(--bg-tertiary)] rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-[var(--text-muted)]">CLI Deploy Commands</span>
+                  <button onClick={handleCopyCliCommands} className="text-xs text-[var(--accent-primary)] hover:underline flex items-center gap-1">
+                    <Copy className="w-3 h-3" />
+                    Copy
+                  </button>
+                </div>
+                <pre className="text-xs bg-[var(--bg-primary)] p-3 rounded overflow-x-auto whitespace-pre-wrap text-green-400 font-mono">
+{deployResult?.cliCommands || generateCliCommands(buildConfig.projectName)}
+                </pre>
+              </div>
+            )}
+
             {deployResult && (
-              <div className={`rounded-lg p-4 ${deployResult.success ? 'bg-green-500/10' : 'bg-[var(--bg-tertiary)]'}`}>
+              <div className={`rounded-lg p-4 ${deployResult.success ? 'bg-green-500/10 border border-green-500/30' : deployResult.requiresAuth ? 'bg-yellow-500/10 border border-yellow-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
                 {deployResult.success ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex items-center gap-2 text-green-400">
-                      <CheckCircle className="w-4 h-4" />
-                      <span className="font-medium">Deployed Successfully!</span>
+                      <CheckCircle className="w-5 h-5" />
+                      <span className="font-medium">✅ Deployed Successfully!</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {deployResult.owner && (
+                        <div className="bg-[var(--bg-primary)] px-3 py-2 rounded">
+                          <span className="text-[var(--text-muted)]">Repository:</span>
+                          <span className="ml-1 font-medium">{deployResult.owner}/{deployResult.repo}</span>
+                        </div>
+                      )}
+                      {deployResult.filesPushed !== undefined && (
+                        <div className="bg-[var(--bg-primary)] px-3 py-2 rounded">
+                          <span className="text-[var(--text-muted)]">Files pushed:</span>
+                          <span className="ml-1 font-medium text-green-400">{deployResult.filesPushed}</span>
+                        </div>
+                      )}
                     </div>
                     {deployResult.repoUrl && (
-                      <a
-                        href={deployResult.repoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-sm text-[var(--accent-primary)] hover:underline"
-                      >
+                      <a href={deployResult.repoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-[var(--accent-primary)] hover:underline bg-[var(--bg-primary)] px-3 py-2 rounded">
                         <Github className="w-4 h-4" />
-                        {deployResult.repoUrl}
+                        View Repository
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     )}
                     {deployResult.pagesUrl && (
-                      <a
-                        href={deployResult.pagesUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-sm text-[var(--accent-primary)] hover:underline"
-                      >
+                      <a href={deployResult.pagesUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-[var(--accent-primary)] hover:underline bg-[var(--bg-primary)] px-3 py-2 rounded">
                         <Globe className="w-4 h-4" />
-                        {deployResult.pagesUrl}
+                        View Live Site
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     )}
+                    <p className="text-xs text-green-300">{deployResult.message}</p>
                   </div>
-                ) : deployResult.instructions ? (
+                ) : deployResult.requiresAuth ? (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 text-yellow-400">
-                      <AlertCircle className="w-4 h-4" />
-                      <span className="font-medium">Manual Deploy Required</span>
+                      <AlertCircle className="w-5 h-5" />
+                      <span className="font-medium">Token Required</span>
                     </div>
-                    <pre className="text-xs bg-[var(--bg-primary)] p-3 rounded overflow-x-auto whitespace-pre-wrap">
-                      {deployResult.instructions.commands || deployResult.instructions.manualSteps?.join('\n')}
-                    </pre>
+                    <p className="text-xs text-yellow-300">Add your GitHub token above for automatic deployment.</p>
+                    <button onClick={() => setShowCliCommands(true)} className="text-xs text-yellow-400 underline">
+                      Or use CLI commands →
+                    </button>
                   </div>
                 ) : (
-                  <div className="text-red-400">{deployResult.message || 'Deploy failed'}</div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-red-400">
+                      <XCircle className="w-4 h-4" />
+                      <span className="font-medium">Deployment Failed</span>
+                    </div>
+                    <p className="text-sm text-red-300">{deployResult.error || deployResult.message || 'Unknown error'}</p>
+                    {deployResult.details && (
+                      <p className="text-xs text-red-200 bg-[var(--bg-primary)] p-2 rounded">{deployResult.details}</p>
+                    )}
+                    <button onClick={() => setShowCliCommands(true)} className="text-xs text-[var(--accent-primary)] underline">
+                      Use CLI commands instead →
+                    </button>
+                  </div>
                 )}
               </div>
             )}
 
-            {/* Quick Tips */}
             <div className="bg-[var(--bg-tertiary)] rounded-lg p-4">
               <div className="text-xs text-[var(--text-muted)] space-y-2">
-                <div className="font-medium">💡 Quick Tips:</div>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>Without a token, you'll get manual deploy instructions</li>
-                  <li>With a token, we'll create the repo and push files automatically</li>
-                  <li>GitHub Pages will be enabled automatically for static sites</li>
-                </ul>
+                <div className="font-medium">💡 Deploy Options:</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <div className="font-medium text-[var(--text-primary)]">Auto Deploy</div>
+                    <ol className="list-decimal list-inside space-y-0.5 text-xs">
+                      <li>Add GitHub token</li>
+                      <li>Enter target repo (optional)</li>
+                      <li>Click Deploy</li>
+                    </ol>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-medium text-[var(--text-primary)]">CLI Deploy</div>
+                    <ol className="list-decimal list-inside space-y-0.5 text-xs">
+                      <li>Download ZIP</li>
+                      <li>Run CLI commands</li>
+                      <li>Enable Pages</li>
+                    </ol>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
